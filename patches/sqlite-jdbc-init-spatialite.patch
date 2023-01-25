@@ -1,5 +1,5 @@
 diff --git a/src/main/java/org/sqlite/core/NativeDB.c b/src/main/java/org/sqlite/core/NativeDB.c
-index ed911a9..573f2e1 100644
+index adafb8f..fe7b7e2 100644
 --- a/src/main/java/org/sqlite/core/NativeDB.c
 +++ b/src/main/java/org/sqlite/core/NativeDB.c
 @@ -18,7 +18,8 @@
@@ -10,10 +10,10 @@ index ed911a9..573f2e1 100644
 +#include <sqlite3.h>
 +#include <spatialite.h>
  
- static jclass dbclass = 0;
- static jclass  fclass = 0;
-@@ -212,6 +213,21 @@ static void sethandle(JNIEnv *env, jobject this, sqlite3 * ref)
-     (*env)->SetLongField(env, this, pointer, fromref(ref));
+ // Java class variables and method references initialized on library load.
+ // These classes are weak references to that if the classloader is no longer referenced (garbage)
+@@ -528,6 +529,20 @@ JNIEXPORT jint JNICALL Java_org_sqlite_core_NativeDB_enable_1load_1extension(
+     return sqlite3_enable_load_extension(db, enable ? 1 : 0);
  }
  
 +static void * getSpatialMemory(JNIEnv *env, jobject this) {
@@ -30,19 +30,10 @@ index ed911a9..573f2e1 100644
 +    (*env)->SetLongField(env, this, pointer, fromref(ref));
 +
 +}
-+
- struct CollationData {
-     JavaVM *vm;
-     jobject func;
-@@ -542,7 +558,6 @@ JNIEXPORT jint JNICALL Java_org_sqlite_core_NativeDB_enable_1load_1extension(
-     return sqlite3_enable_load_extension(db, enable ? 1 : 0);
- }
  
--
  JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1open_1utf8(
          JNIEnv *env, jobject this, jbyteArray file, jint flags)
- {
-@@ -574,6 +589,10 @@ JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1open_1utf8(
+@@ -560,6 +575,10 @@ JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1open_1utf8(
  
      // Ignore failures, as we can tolerate regular result codes.
      (void) sqlite3_extended_result_codes(db, 1);
@@ -52,29 +43,26 @@ index ed911a9..573f2e1 100644
 +    setSpatialMemory(env, this, spatialMemory);
  }
  
- JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1close(
-@@ -588,6 +607,10 @@ JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1close(
+ JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB_interrupt(JNIEnv *env, jobject this)
+@@ -1858,4 +1877,8 @@ JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB__1close(
          }
-         sethandle(env, this, 0);
+         sethandle(env, nativeDB, 0);
      }
-+    void* spatial = getSpatialMemory(env, this);
++    void* spatial = getSpatialMemory(env, nativeDB);
 +    if (spatial) {
 +        spatialite_cleanup_ex(spatial);
 +    }
  }
- 
- JNIEXPORT void JNICALL Java_org_sqlite_core_NativeDB_interrupt(JNIEnv *env, jobject this)
 diff --git a/src/main/java/org/sqlite/core/NativeDB.java b/src/main/java/org/sqlite/core/NativeDB.java
-index 3426c2a..010744c 100644
+index 5b26f83..75280dc 100644
 --- a/src/main/java/org/sqlite/core/NativeDB.java
 +++ b/src/main/java/org/sqlite/core/NativeDB.java
-@@ -25,6 +25,9 @@ import org.sqlite.*;
- public final class NativeDB extends DB {
+@@ -35,6 +35,8 @@ public final class NativeDB extends DB {
+ 
      /** SQLite connection handle. */
-     long pointer = 0;
+     private long pointer = 0;
 +    /** Pointer to native memory (see spatialite_init_ex) */
 +    long spatialMemory = 0;
-+
  
      private static boolean isLoaded;
      private static boolean loadSucceeded;

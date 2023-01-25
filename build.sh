@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
+set -x
 
-SQLITE_PATH=sqlite-amalgamation-3380000
-SPATIALITE_PATH=libspatialite-5.0.1
+SQLITE_PATH=sqlite-amalgamation-3400100
+SPATIALITE_PATH=libspatialite-fossil
 RTTOPO_PATH=librttopo-1.1.0
 TIFF_PATH=tiff-4.3.0
 ICONV_PATH=libiconv-1.16
-GEOS_PATH=geos-3.10.2
-PROJ_PATH=proj-8.2.0
+GEOS_PATH=geos-3.11.1
+PROJ_PATH=proj-9.1.0
 
 
 SQLITE_JDBC_PATH=sqlite-jdbc
@@ -43,6 +44,16 @@ prepare() {
     export TOOLCHAIN=$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64
     export TARGET=$1
 
+    if [ "$TARGET" == "aarch64-linux-android" ]; then
+        export ANDROID_ABI="arm64-v8a"
+    elif [ "$TARGET" == "armv7a-linux-androideabi" ]; then
+        export ANDROID_ABI="armeabi-v7a"
+    elif [ "$TARGET" == "i686-linux-android" ]; then
+        export ANDROID_ABI="x86"
+    elif [ "$TARGET" == "x86_64-linux-android" ]; then
+        export ANDROID_ABI="x86_64"
+    fi
+
     # Set this to your minSdkVersion.
     export API=21
 
@@ -57,6 +68,7 @@ prepare() {
     arch=$(echo $TARGET | cut -f1 -d'-')
     export INSTALLDIR="$(pwd)/install/$arch"
     export TARGETDIR="$(pwd)/target/$arch"
+    export ANDROID_PLATFORM=24
     mkdir -p $INSTALLDIR/lib
     mkdir -p $INSTALLDIR/include
     mkdir -p $TARGETDIR
@@ -97,11 +109,13 @@ build_geos() {
     echo "BUILDING GEOS"
     mkdir -p $GEOS_PATH/$TARGET-shared $GEOS_PATH/$TARGET-static
     cd $GEOS_PATH/$TARGET-shared
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release \
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../$TARGET-static
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_EXE_LINKER_FLAGS="-static"
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_EXE_LINKER_FLAGS="-static -Wl,--allow-multiple-definition" -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM 
     make -j16
     make install
     cd ../..
@@ -129,13 +143,17 @@ build_libtiff() {
     # LIBTIFF http://download.osgeo.org/libtiff/tiff-4.3.0.tar.gz
     echo "BUILDING LIBTIFF"
     cd $TIFF_PATH
-    mkdir -p $TARGET-static $TARGET-shared
+    mkdir -p $TARGET-shared $TARGET-static
     cd $TARGET-shared
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_C_FLAGS="-fPIC" -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_EXE_LINKER_FLAGS=-lm
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_C_FLAGS="-fPIC" -DBUILD_SHARED_LIBS=on -DBUILD_STATIC_LIBS=on -DCMAKE_INSTALL_PREFIX=$INSTALLDIR \
+        -DCMAKE_EXE_LINKER_FLAGS=-lm -DCMAKE_BUILD_TYPE=Release \
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../$TARGET-static
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_C_FLAGS="-fPIC" -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_EXE_LINKER_FLAGS=-lm
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_C_FLAGS="-fPIC" -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR \
+        -DCMAKE_EXE_LINKER_FLAGS=-lm -DCMAKE_BUILD_TYPE=Release \
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../..
@@ -146,15 +164,25 @@ build_proj() {
     prepare $1
 
     # PROJ
-    echo "BUILDING LIBPROJ"
+    echo "BUILDING LIBPROJ ${TARGET/-linux-android/}"
     cd $PROJ_PATH
-    mkdir -p $TARGET-static $TARGET-shared
+    mkdir -p $TARGET-shared $TARGET-static
     cd $TARGET-shared
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-I$INSTALLDIR/include -fPIC" -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_EXE_LINKER_FLAGS=-lm -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DCMAKE_CXX_FLAGS="-I$INSTALLDIR/include -fPIC" -DCMAKE_C_FLAGS="-fPIC" \
+        -DCMAKE_INSTALL_PREFIX=$INSTALLDIR \
+        -DSQLITE3_INCLUDE_DIR=$INSTALLDIR/include -DSQLITE3_LIBRARY=$INSTALLDIR/lib/libsqlite3.so \
+        -DTIFF_INCLUDE_DIR=$INSTALLDIR/include -DTIFF_LIBRARY=$INSTALLDIR/lib/libtiff.so \
+        -DCMAKE_EXE_LINKER_FLAGS=-lm -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF -DCMAKE_BUILD_TYPE=Release \
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../$TARGET-static
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DBUILD_LIBPROJ_SHARED=off -DCMAKE_CXX_FLAGS="-I$INSTALLDIR/include -fPIC" -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_EXE_LINKER_FLAGS=-lm  -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DBUILD_LIBPROJ_SHARED=off -DCMAKE_CXX_FLAGS="-I$INSTALLDIR/include -fPIC" -DCMAKE_C_FLAGS="-fPIC" \
+        -DCMAKE_INSTALL_PREFIX=$INSTALLDIR \
+        -DSQLITE3_INCLUDE_DIR=$INSTALLDIR/include -DSQLITE3_LIBRARY=$INSTALLDIR/lib/libsqlite3.so \
+        -DTIFF_INCLUDE_DIR=$INSTALLDIR/include -DTIFF_LIBRARY=$INSTALLDIR/lib/libtiff.so \
+        -DCMAKE_EXE_LINKER_FLAGS=-lm  -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF -DCMAKE_BUILD_TYPE=Release \
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../..
@@ -168,7 +196,7 @@ build_spatialite() {
     echo "BUILDING SPATIALITE"
     cd $SPATIALITE_PATH
     # spatialite uses outdated config.sub/guess files.. update
-    cp ../$PROJ_PATH/config.{sub,guess} .
+    cp ../$ICONV_PATH/build-aux/config.{sub,guess} .
     make clean || true
     CFLAGS="-I$INSTALLDIR/include $SQLITE_FLAGS" LDFLAGS="-L$INSTALLDIR/lib -llog" ./configure --prefix=$INSTALLDIR --host $TARGET --target=android --enable-static=yes --enable-shared=yes --with-pic \
         --enable-rttopo --enable-geos --enable-iconv --with-geosconfig=$INSTALLDIR/bin/geos-config \
@@ -190,24 +218,22 @@ build_jdbc() {
 
     make jni-header
     mkdir -p $TARGET
-    $CC -fPIC $CCFLAGS -I$INSTALLDIR/include -I target/common-lib -c -o $TARGET/NativeDB.o src/main/java/org/sqlite/core/NativeDB.c
+    $CC -fPIC $CCFLAGS -I$INSTALLDIR/include -Itarget/common-lib -c -o $TARGET/NativeDB.o src/main/java/org/sqlite/core/NativeDB.c
     #$CC $CCFLAGS -I$INSTALLDIR/include -I target/common-lib -c -o $TARGET/extension-functions.o src/main/ext/extension-functions.c
 
     $CXX -shared -lm -llog -lz -static-libstdc++ -o $TARGETDIR/libsqlitejdbc.so $TARGET/*.o \
+        $INSTALLDIR/lib/libsqlite3.a \
         $INSTALLDIR/lib/libcharset.a \
         $INSTALLDIR/lib/libgeos.a \
         $INSTALLDIR/lib/libgeos_c.a \
         $INSTALLDIR/lib/libiconv.a \
         $INSTALLDIR/lib/libproj.a \
         $INSTALLDIR/lib/librttopo.a \
-        $INSTALLDIR/lib/libsqlite3.a \
         $INSTALLDIR/lib/libtiff.a \
         $INSTALLDIR/lib/libtiffxx.a \
-        $INSTALLDIR/lib/libspatialite.a 
-    
+        $INSTALLDIR/lib/libspatialite.a
+
     $STRIP $TARGETDIR/libsqlitejdbc.so
-        
-        #$INSTALLDIR/lib/mod_spatialite.a
     
     cd ..
 }
@@ -220,14 +246,11 @@ create_jar() {
     # Building jar
     cd $SQLITE_JDBC_PATH
     mvn package -DskipTests
-
     cp target/sqlite-jdbc-*.jar $TARGETDIR/
     cd $TARGETDIR
 
     # Remove the "basic" native libraries
-    zip -d sqlite-jdbc-*.jar "/org/sqlite/native/*"
-
-    #mkdir -p tmp/org/sqlite/native/Linux-Android
+    zip -d sqlite-jdbc-*-SNAPSHOT.jar "/org/sqlite/native/*"
     rm -rf tmp
     mkdir -p tmp/lib/x86_64 tmp/lib/arm64-v8a tmp/lib/armeabi-v7a tmp/lib/x86
     cp -f x86_64/* tmp/lib/x86_64 || true
@@ -243,12 +266,12 @@ create_jar() {
 
     # Add the spatialite-included binaries
     cd tmp
-    zip -r $TARGETDIR/sqlite-jdbc-*.jar *
+    zip -r $TARGETDIR/sqlite-jdbc-*SNAPSHOT.jar *
 
     sqlitever=$(echo $SQLITE_PATH | rev | cut -d'-' -f1 | rev)
     spatialitever=$(echo $SPATIALITE_PATH | rev | cut -d'-' -f1 | rev)
-    rm -f $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
-    mv $TARGETDIR/sqlite-jdbc-*.jar $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
+    #rm -f $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
+    mv $TARGETDIR/sqlite-jdbc-*SNAPSHOT.jar $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
 
     cd $olddir
 }
@@ -263,6 +286,7 @@ build_all() {
     build_rttopo $1
     build_spatialite $1
     build_jdbc $1
+    echo "build done"
 }
 
 
