@@ -35,8 +35,9 @@ if [ ! -d proj-9.1.0 ]; then
 fi
 
 
-if [ ! -d libspatialite ]; then
+if [ ! -d libspatialite-fossil ]; then
     fossil clone https://www.gaia-gis.it/fossil/libspatialite
+    mv libspatialite libspatialite-fossil
 fi
 #if [ ! -d libspatialite-5.0.1 ]; then
 #    wget -N http://www.gaia-gis.it/gaia-sins/libspatialite-5.0.1.tar.gz
