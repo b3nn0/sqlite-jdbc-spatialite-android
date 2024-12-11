@@ -2,13 +2,13 @@
 set -e
 set -x
 
-SQLITE_PATH=sqlite-amalgamation-3400100
+SQLITE_PATH=sqlite-amalgamation-3470200
 SPATIALITE_PATH=libspatialite-fossil
 RTTOPO_PATH=librttopo-1.1.0
-TIFF_PATH=tiff-4.3.0
-ICONV_PATH=libiconv-1.16
-GEOS_PATH=geos-3.11.1
-PROJ_PATH=proj-9.1.0
+TIFF_PATH=tiff-4.7.0
+ICONV_PATH=libiconv-1.17
+GEOS_PATH=geos-3.13.0
+PROJ_PATH=proj-9.5.1
 
 
 SQLITE_JDBC_PATH=sqlite-jdbc
@@ -109,12 +109,12 @@ build_geos() {
     echo "BUILDING GEOS"
     mkdir -p $GEOS_PATH/$TARGET-shared $GEOS_PATH/$TARGET-static
     cd $GEOS_PATH/$TARGET-shared
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release \
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
         -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
     make -j16
     make install
     cd ../$TARGET-static
-    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release \
+    cmake --toolchain $NDKROOT/build/cmake/android.toolchain.cmake .. -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
         -DCMAKE_EXE_LINKER_FLAGS="-static -Wl,--allow-multiple-definition" -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM 
     make -j16
     make install
@@ -173,7 +173,7 @@ build_proj() {
         -DSQLITE3_INCLUDE_DIR=$INSTALLDIR/include -DSQLITE3_LIBRARY=$INSTALLDIR/lib/libsqlite3.so \
         -DTIFF_INCLUDE_DIR=$INSTALLDIR/include -DTIFF_LIBRARY=$INSTALLDIR/lib/libtiff.so \
         -DCMAKE_EXE_LINKER_FLAGS=-lm -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF -DCMAKE_BUILD_TYPE=Release \
-        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM -DBUILD_TESTING=OFF
     make -j16
     make install
     cd ../$TARGET-static
@@ -182,7 +182,7 @@ build_proj() {
         -DSQLITE3_INCLUDE_DIR=$INSTALLDIR/include -DSQLITE3_LIBRARY=$INSTALLDIR/lib/libsqlite3.so \
         -DTIFF_INCLUDE_DIR=$INSTALLDIR/include -DTIFF_LIBRARY=$INSTALLDIR/lib/libtiff.so \
         -DCMAKE_EXE_LINKER_FLAGS=-lm  -DENABLE_CURL=OFF -DBUILD_PROJSYNC=OFF -DCMAKE_BUILD_TYPE=Release \
-        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM
+        -DANDROID_ABI=$ANDROID_ABI -DCMAKE_ANDROID_ARCH_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM -DBUILD_TESTING=OFF
     make -j16
     make install
     cd ../..
@@ -245,12 +245,13 @@ create_jar() {
 
     # Building jar
     cd $SQLITE_JDBC_PATH
+    rm -f target/*.jar
     mvn package -DskipTests
-    cp target/sqlite-jdbc-*.jar $TARGETDIR/
+    cp target/sqlite-jdbc-*.jar $TARGETDIR/package.jar
     cd $TARGETDIR
 
     # Remove the "basic" native libraries
-    zip -d sqlite-jdbc-*-SNAPSHOT.jar "/org/sqlite/native/*"
+    zip -d package.jar "/org/sqlite/native/*"
     rm -rf tmp
     mkdir -p tmp/lib/x86_64 tmp/lib/arm64-v8a tmp/lib/armeabi-v7a tmp/lib/x86
     cp -f x86_64/* tmp/lib/x86_64 || true
@@ -266,12 +267,12 @@ create_jar() {
 
     # Add the spatialite-included binaries
     cd tmp
-    zip -r $TARGETDIR/sqlite-jdbc-*SNAPSHOT.jar *
+    zip -r $TARGETDIR/package.jar *
 
     sqlitever=$(echo $SQLITE_PATH | rev | cut -d'-' -f1 | rev)
     spatialitever=$(echo $SPATIALITE_PATH | rev | cut -d'-' -f1 | rev)
     #rm -f $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
-    mv $TARGETDIR/sqlite-jdbc-*SNAPSHOT.jar $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
+    mv $TARGETDIR/package.jar $TARGETDIR/sqlite-jdbc-$sqlitever-spatialite-$spatialitever.jar
 
     cd $olddir
 }
@@ -294,7 +295,7 @@ build_all() {
 
 for target in ${TARGETS[*]}; do
     echo $target
-    build_all $target
+    #build_all $target
 done
 
 create_jar
