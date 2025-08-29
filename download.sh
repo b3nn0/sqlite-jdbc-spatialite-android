@@ -5,9 +5,9 @@ set -x
 
 stat sqlite-jdbc || git clone https://github.com/xerial/sqlite-jdbc.git
 
-if [ ! -d sqlite-amalgamation-3470200.zip ]; then
-    wget -N https://sqlite.org/2024/sqlite-amalgamation-3470200.zip
-    unzip sqlite-amalgamation-3470200.zip
+if [ ! -d sqlite-amalgamation-3500400.zip ]; then
+    wget -N https://www.sqlite.org/2025/sqlite-amalgamation-3500400.zip
+    unzip sqlite-amalgamation-3500400.zip
 fi
 
 
@@ -24,9 +24,9 @@ if [ ! -d tiff-4.7.0 ]; then
     tar xzf tiff-4.7.0.tar.gz
 fi
 
-if [ ! -d geos-3.13.0 ]; then
-    wget -N https://download.osgeo.org/geos/geos-3.13.0.tar.bz2
-    tar xjf geos-3.13.0.tar.bz2
+if [ ! -d geos-3.14.0 ]; then
+    wget -N https://download.osgeo.org/geos/geos-3.14.0.tar.bz2
+    tar xjf geos-3.14.0.tar.bz2
 fi
 
 if [ ! -d proj-9.5.1 ]; then

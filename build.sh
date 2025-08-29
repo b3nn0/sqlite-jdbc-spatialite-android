@@ -2,12 +2,12 @@
 set -e
 set -x
 
-SQLITE_PATH=sqlite-amalgamation-3470200
+SQLITE_PATH=sqlite-amalgamation-3500400
 SPATIALITE_PATH=libspatialite-fossil
 RTTOPO_PATH=librttopo-1.1.0
 TIFF_PATH=tiff-4.7.0
 ICONV_PATH=libiconv-1.17
-GEOS_PATH=geos-3.13.0
+GEOS_PATH=geos-3.14.0
 PROJ_PATH=proj-9.5.1
 
 
@@ -55,7 +55,7 @@ prepare() {
     fi
 
     # Set this to your minSdkVersion.
-    export API=21
+    export API=23
 
     # Configure and build.
     export AR=$TOOLCHAIN/bin/llvm-ar
@@ -251,7 +251,7 @@ create_jar() {
     cd $TARGETDIR
 
     # Remove the "basic" native libraries
-    zip -d package.jar "/org/sqlite/native/*"
+    zip -d package.jar "/org/sqlite/native/Linux-Android/*"
     rm -rf tmp
     mkdir -p tmp/lib/x86_64 tmp/lib/arm64-v8a tmp/lib/armeabi-v7a tmp/lib/x86
     cp -f x86_64/* tmp/lib/x86_64 || true
@@ -295,7 +295,7 @@ build_all() {
 
 for target in ${TARGETS[*]}; do
     echo $target
-    #build_all $target
+    build_all $target
 done
 
 create_jar
